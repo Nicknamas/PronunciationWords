@@ -1,6 +1,9 @@
 from gtts import gTTS
 import pygame
+import io
 import time
+import threading
+from queue import Queue
 import os
 
 def read_words_from_file(filename):
@@ -16,50 +19,69 @@ def read_words_from_file(filename):
         print(f"Ошибка при чтении файла: {e}")
         return []
 
-def speak_words_gtts(words, delay=2.0, language='ru'):
-    """Произносит слова используя gTTS"""
-    if not words:
-        print("Нет слов для воспроизведения!")
-        return
+def generate_audio_in_memory(words, language='ru'):
+    """Генерирует аудио для всех слов в памяти"""
+    audio_data = []
     
+    print("Генерация аудио...")
+    for i, word in enumerate(words, 1):
+        print(f"Генерация {i}/{len(words)}: {word}")
+        try:
+            # Генерируем аудио в память (без сохранения в файл)
+            tts = gTTS(text=word, lang=language, slow=False)
+            audio_buffer = io.BytesIO()
+            tts.write_to_fp(audio_buffer)
+            audio_buffer.seek(0)  # Перемещаемся в начало буфера
+            audio_data.append(audio_buffer)
+        except Exception as e:
+            print(f"Ошибка генерации для '{word}': {e}")
+            audio_data.append(None)
+    
+    return audio_data
+
+def play_audio_sequentially(audio_data, words):
+    """Воспроизводит предварительно сгенерированные аудиофайлы"""
     pygame.mixer.init()
+    pygame.mixer.set_num_channels(2)  # Два канала для плавного перехода
     
     print(f"Начинаю воспроизведение {len(words)} слов...")
     print("-" * 40)
     
-    for i, word in enumerate(words, 1):
+    for i, (audio_buffer, word) in enumerate(zip(audio_data, words), 1):
+        if audio_buffer is None:
+            print(f"Пропуск {i}/{len(words)}: {word} (ошибка генерации)")
+            continue
+            
         print(f"{i}/{len(words)}: {word}")
         
         try:
-            # Создаем аудио файл
-            tts = gTTS(text=word, lang=language, slow=False)
-            temp_file = "temp_audio.mp3"
-            tts.save(temp_file)
+            # Воспроизводим аудио из памяти
+            audio_buffer.seek(0)  # Важно: возвращаемся в начало буфера
+            temp_filename = f"temp_{i}.mp3"
             
-            # Воспроизводим аудио
-            pygame.mixer.music.load(temp_file)
-            pygame.mixer.music.play()
+            # Сохраняем временно для воспроизведения
+            with open(temp_filename, 'wb') as f:
+                f.write(audio_buffer.getvalue())
+            
+            # Загружаем и воспроизводим
+            sound = pygame.mixer.Sound(temp_filename)
+            channel = sound.play()
             
             # Ждем завершения воспроизведения
-            while pygame.mixer.music.get_busy():
-                time.sleep(0.1)
+            while channel.get_busy():
+                pygame.time.wait(1)  # Короткая пауза
             
             # Удаляем временный файл
-            os.remove(temp_file)
+            os.remove(temp_filename)
             
-            # Пауза между словами (кроме последнего)
-            if i < len(words):
-                time.sleep(delay)
-                
         except Exception as e:
-            print(f"Ошибка при воспроизведении слова '{word}': {e}")
+            print(f"Ошибка воспроизведения '{word}': {e}")
     
     print("-" * 40)
     print("Воспроизведение завершено!")
-    pygame.mixer.quit()
 
-def main_gtts():
-    """Основная функция программы с gTTS"""
+def main_fast():
+    """Основная функция с быстрым воспроизведением"""
     filename = "listen.txt"
     
     if not os.path.exists(filename):
@@ -71,17 +93,13 @@ def main_gtts():
         print("Не удалось прочитать слова из файла.")
         return
     
-    print(f"Прочитано {len(words)} слов:")
-    for word in words:
-        print(f"  - {word}")
-    print()
+    print(f"Прочитано {len(words)} слов")
     
-    try:
-        speak_words_gtts(words, delay=0.0, language='ru')
-    except KeyboardInterrupt:
-        print("\nВоспроизведение прервано пользователем.")
-    except Exception as e:
-        print(f"Произошла ошибка: {e}")
+    # Генерируем все аудио заранее
+    audio_data = generate_audio_in_memory(words, 'ru')
+    
+    # Воспроизводим без задержек
+    play_audio_sequentially(audio_data, words)
 
-# Для использования gTTS версии раскомментируйте следующую строку:
-if __name__ == "__main__": main_gtts()
+if __name__ == "__main__":
+    main_fast()
