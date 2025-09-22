@@ -10,6 +10,78 @@ import json
 import pickle
 import hashlib
 
+class SettingsManager:
+    """Класс для управления настройками программы"""
+    
+    def __init__(self, settings_file='tts_settings.json'):
+        self.settings_file = settings_file
+        self.default_settings = {
+            'pause_duration': 0.3,
+            'speed_factor': 1.2,
+            'language': 'ru',
+            'generation_mode': 1,  # 1-параллельный, 2-батчи, 3-авто
+            'max_workers': 4,
+            'batch_size': 3
+        }
+        self.settings = self.load_settings()
+    
+    def load_settings(self):
+        """Загружает настройки из файла"""
+        try:
+            if os.path.exists(self.settings_file):
+                with open(self.settings_file, 'r', encoding='utf-8') as f:
+                    saved_settings = json.load(f)
+                
+                # Объединяем с настройками по умолчанию
+                settings = {**self.default_settings, **saved_settings}
+                print(f"✅ Загружены сохраненные настройки")
+                return settings
+            else:
+                print("✅ Используются настройки по умолчанию")
+                return self.default_settings.copy()
+        except Exception as e:
+            print(f"❌ Ошибка загрузки настроек: {e}, используем по умолчанию")
+            return self.default_settings.copy()
+    
+    def save_settings(self):
+        """Сохраняет настройки в файл"""
+        try:
+            with open(self.settings_file, 'w', encoding='utf-8') as f:
+                json.dump(self.settings, f, indent=2, ensure_ascii=False)
+            print("💾 Настройки сохранены!")
+        except Exception as e:
+            print(f"❌ Ошибка сохранения настроек: {e}")
+    
+    def get(self, key):
+        """Получает значение настройки"""
+        return self.settings.get(key, self.default_settings.get(key))
+    
+    def set(self, key, value):
+        """Устанавливает значение настройки"""
+        self.settings[key] = value
+    
+    def print_current_settings(self):
+        """Показывает текущие настройки"""
+        print("\n📊 ТЕКУЩИЕ НАСТРОЙКИ:")
+        print(f"   ⏱️ Пауза между словами: {self.settings['pause_duration']}с")
+        print(f"   🎯 Скорость произношения: {self.settings['speed_factor']}x")
+        print(f"   🌐 Язык: {self.settings['language']}")
+        print(f"   🔧 Режим генерации: {self.get_mode_name()}")
+        
+        if self.settings['generation_mode'] == 1:
+            print(f"   🚀 Потоков: {self.settings['max_workers']}")
+        elif self.settings['generation_mode'] == 2:
+            print(f"   📦 Размер батча: {self.settings['batch_size']}")
+    
+    def get_mode_name(self):
+        """Возвращает название режима генерации"""
+        modes = {
+            1: "Параллельный",
+            2: "Батчами", 
+            3: "Автоматический"
+        }
+        return modes.get(self.settings['generation_mode'], "Неизвестно")
+
 class AudioCache:
     """Класс для кэширования аудио данных между запусками программы"""
     
@@ -257,31 +329,90 @@ def play_words_optimized(audio_data, words, pause_duration=0.3, playback_speed=1
         except:
             pass
 
-def get_generation_mode():
-    """Выбор режима генерации"""
-    print("\n🎛️ ВЫБЕРИТЕ РЕЖИМ ГЕНЕРАЦИИ:")
-    print("1. Параллельный (рекомендуется для большого количества слов)")
-    print("2. Батчами (стабильность, контроль над процессом)")
-    print("3. Автоматический выбор")
+def get_user_settings(settings_manager):
+    """Получает настройки от пользователя с возможностью использовать сохраненные"""
+    settings_manager.print_current_settings()
     
-    while True:
-        choice = input("Введите номер (1-3): ").strip()
-        if choice in ['1', '2', '3']:
-            return int(choice)
-        print("❌ Пожалуйста, введите 1, 2 или 3")
+    print("\n⚙️ НАСТРОЙКИ ВОСПРОИЗВЕДЕНИЯ:")
+    print("1 - Использовать сохраненные настройки")
+    print("2 - Ввести новые настройки")
+    print("3 - Использовать сохраненные, но изменить паузу/скорость")
+    
+    choice = input("Выберите вариант (1-3): ").strip()
+    
+    if choice == "1":
+        # Используем сохраненные настройки без изменений
+        print("✅ Используются сохраненные настройки")
+        return
+    
+    # Запрос новых настроек
+    if choice == "3":
+        print("📝 Изменение только паузы и скорости:")
+    
+    if choice != "3":
+        # Настройка паузы
+        print("\n⏱️ Пауза между словами:")
+        print("   0.0 - Без паузы")
+        print("   0.1 - Очень короткая")
+        print("   0.3 - Короткая (рекомендуется)")
+        print("   0.5 - Средняя")
+        print("   1.0 - Длинная")
+    
+    pause_input = input(f"Пауза в секундах [текущая: {settings_manager.get('pause_duration')}]: ").strip()
+    if pause_input:
+        settings_manager.set('pause_duration', float(pause_input))
+    
+    if choice != "3":
+        # Настройка скорости
+        print("\n🎯 Скорость произношения:")
+        print("   0.7 - Очень медленно")
+        print("   0.9 - Медленно")
+        print("   1.0 - Нормальная")
+        print("   1.2 - Быстро (рекомендуется)")
+        print("   1.5 - Очень быстро")
+    
+    speed_input = input(f"Скорость 0.5-2.0 [текущая: {settings_manager.get('speed_factor')}]: ").strip()
+    if speed_input:
+        speed = float(speed_input)
+        if 0.5 <= speed <= 2.0:
+            settings_manager.set('speed_factor', speed)
+        else:
+            print("❌ Скорость должна быть от 0.5 до 2.0, используется значение по умолчанию")
+    
+    if choice != "3":
+        # Выбор режима генерации
+        print("\n🎛️ РЕЖИМ ГЕНЕРАЦИИ:")
+        print("1 - Параллельный (скорость)")
+        print("2 - Батчами (стабильность)")
+        print("3 - Автоматический")
+        
+        mode_input = input(f"Режим [текущий: {settings_manager.get('generation_mode')}]: ").strip()
+        if mode_input:
+            settings_manager.set('generation_mode', int(mode_input))
+        
+        # Дополнительные настройки в зависимости от режима
+        if settings_manager.get('generation_mode') == 1:
+            workers_input = input(f"Количество потоков [текущее: {settings_manager.get('max_workers')}]: ").strip()
+            if workers_input:
+                settings_manager.set('max_workers', int(workers_input))
+        elif settings_manager.get('generation_mode') == 2:
+            batch_input = input(f"Размер батча [текущий: {settings_manager.get('batch_size')}]: ").strip()
+            if batch_input:
+                settings_manager.set('batch_size', int(batch_input))
 
-def get_optimization_settings(word_count):
-    """Настройки оптимизации"""
+def get_optimization_settings(word_count, settings_manager):
+    """Настройки оптимизации с учетом сохраненных значений"""
     if word_count <= 5:
-        return 2, 2  # Мало слов - мало потоков/батчей
+        return settings_manager.get('max_workers'), settings_manager.get('batch_size')
     elif word_count <= 15:
-        return 4, 3  # Среднее количество
+        return min(4, settings_manager.get('max_workers')), min(3, settings_manager.get('batch_size'))
     else:
-        return 6, 4  # Много слов
+        return settings_manager.get('max_workers'), settings_manager.get('batch_size')
 
-def main_optimized_with_cache():
-    """Основная функция с кэшированием и выбором режима"""
-    # Инициализируем кэш
+def main_optimized_with_cache_and_settings():
+    """Основная функция с кэшированием и настройками"""
+    # Инициализируем менеджеры
+    settings_manager = SettingsManager()
     cache = AudioCache()
     
     filename = "listen.txt"
@@ -299,115 +430,150 @@ def main_optimized_with_cache():
     print(f"📖 Загружено {len(words)} слов")
     print("📝 Слова:", ", ".join(words[:10]) + ("..." if len(words) > 10 else ""))
     
-    # Настройки воспроизведения
-    print("\n⚙️ НАСТРОЙКИ ВОСПРОИЗВЕДЕНИЯ:")
+    # Получаем настройки от пользователя
+    get_user_settings(settings_manager)
     
-    pause_input = input("⏱️ Пауза между словами в секундах (по умолчанию 0.2): ").strip()
-    pause_duration = float(pause_input) if pause_input else 0.2
-    
-    speed_input = input("🎯 Скорость произношения 0.5-2.0 (по умолчанию 1.2): ").strip()
-    speed_factor = float(speed_input) if speed_input else 1.2
-    
-    # Выбор режима генерации
-    generation_mode = get_generation_mode()
+    # Показываем финальные настройки
+    settings_manager.print_current_settings()
     
     # Генерация аудио
     gen_start = time.time()
     
+    generation_mode = settings_manager.get('generation_mode')
+    speed_factor = settings_manager.get('speed_factor')
+    
     if generation_mode == 1:
         # Параллельный режим
-        max_workers, _ = get_optimization_settings(len(words))
+        max_workers, _ = get_optimization_settings(len(words), settings_manager)
         audio_data = generate_audio_parallel(
-            words, speed_factor=speed_factor, max_workers=max_workers, cache=cache
+            words, 
+            speed_factor=speed_factor, 
+            max_workers=max_workers, 
+            cache=cache
         )
     elif generation_mode == 2:
         # Батч-режим
-        _, batch_size = get_optimization_settings(len(words))
+        _, batch_size = get_optimization_settings(len(words), settings_manager)
         audio_data = generate_audio_batch(
-            words, speed_factor=speed_factor, batch_size=batch_size, cache=cache
+            words, 
+            speed_factor=speed_factor, 
+            batch_size=batch_size, 
+            cache=cache
         )
     else:
         # Автоматический выбор
-        max_workers, batch_size = get_optimization_settings(len(words))
+        max_workers, batch_size = get_optimization_settings(len(words), settings_manager)
         if len(words) > 10:
             print("🤖 Автоматически выбран параллельный режим")
             audio_data = generate_audio_parallel(
-                words, speed_factor=speed_factor, max_workers=max_workers, cache=cache
+                words, 
+                speed_factor=speed_factor, 
+                max_workers=max_workers, 
+                cache=cache
             )
         else:
             print("🤖 Автоматически выбран батч-режим")
             audio_data = generate_audio_batch(
-                words, speed_factor=speed_factor, batch_size=batch_size, cache=cache
+                words, 
+                speed_factor=speed_factor, 
+                batch_size=batch_size, 
+                cache=cache
             )
     
     gen_time = time.time() - gen_start
     print(f"⏱️ Генерация аудио завершена за {gen_time:.1f} секунд")
     
-    # Сохраняем кэш
+    # Сохраняем настройки и кэш
+    settings_manager.save_settings()
     cache.save_cache()
     
     # Воспроизведение
     try:
-        play_words_optimized(audio_data, words, pause_duration, speed_factor)
+        play_words_optimized(
+            audio_data, 
+            words, 
+            settings_manager.get('pause_duration'), 
+            settings_manager.get('speed_factor')
+        )
     except KeyboardInterrupt:
         print("\n⏹️ Воспроизведение прервано пользователем")
     except Exception as e:
         print(f"❌ Ошибка при воспроизведении: {e}")
     finally:
-        # Всегда сохраняем кэш при завершении
+        # Всегда сохраняем настройки и кэш при завершении
+        settings_manager.save_settings()
         cache.save_cache()
 
-def clear_cache():
-    """Очистка кэша"""
+def clear_all_data():
+    """Очистка всех данных"""
+    # Очистка кэша
     cache_files = ['audio_cache.pkl']
     for cache_file in cache_files:
         if os.path.exists(cache_file):
             os.remove(cache_file)
             print(f"🧹 Кэш {cache_file} очищен")
-
-def show_cache_info():
-    """Показывает информацию о кэше"""
-    cache = AudioCache()
-    print(f"📊 Размер кэша: {len(cache.cache)} записей")
     
-    # Примеры слов в кэше (первые 5)
-    sample_words = list(cache.cache.keys())[:5]
-    print("📝 Примеры записей в кэше:", sample_words)
+    # Очистка настроек
+    settings_file = 'tts_settings.json'
+    if os.path.exists(settings_file):
+        os.remove(settings_file)
+        print(f"🧹 Настройки {settings_file} очищены")
+
+def show_settings_info():
+    """Показывает текущие настройки"""
+    settings_manager = SettingsManager()
+    settings_manager.print_current_settings()
 
 if __name__ == "__main__":
-    print("🚀 УСКОРЕННОЕ АУДИО ВОСПРОИЗВЕДЕНИЕ С КЭШИРОВАНИЕМ")
-    print("=" * 55)
+    print("🚀 УСКОРЕННОЕ АУДИО ВОСПРОИЗВЕДЕНИЕ С СОХРАНЕНИЕМ НАСТРОЕК")
+    print("=" * 65)
     
     print("\n🎮 РЕЖИМЫ:")
-    print("1 - Основной режим с кэшированием")
-    print("2 - Быстрый запуск (пауза 0.1с, скорость 1.3x)")
-    print("3 - Очистка кэша")
-    print("4 - Информация о кэше")
-    print("5 - Тест скорости генерации")
+    print("1 - Основной режим (с настройками)")
+    print("2 - Быстрый запуск с сохраненными настройками")
+    print("3 - Просмотр текущих настроек")
+    print("4 - Очистка всех данных (кэш + настройки)")
+    print("5 - Тест скорости")
     
     choice = input("Выберите режим (1-5): ").strip()
     
     if choice == "2":
-        # Быстрый запуск
+        # Быстрый запуск с сохраненными настройками
+        settings_manager = SettingsManager()
         cache = AudioCache()
         words = read_words_from_file("listen.txt")
         if words:
-            print(f"⚡ Быстрый запуск {len(words)} слов")
-            audio_data = generate_audio_parallel(words, speed_factor=1.3, max_workers=4, cache=cache)
-            play_words_optimized(audio_data, words, pause_duration=0.1, playback_speed=1.3)
+            print("⚡ Быстрый запуск с сохраненными настройками")
+            settings_manager.print_current_settings()
+            
+            audio_data = generate_audio_parallel(
+                words, 
+                speed_factor=settings_manager.get('speed_factor'), 
+                max_workers=settings_manager.get('max_workers'), 
+                cache=cache
+            )
+            play_words_optimized(
+                audio_data, 
+                words, 
+                settings_manager.get('pause_duration'), 
+                settings_manager.get('speed_factor')
+            )
+            settings_manager.save_settings()
             cache.save_cache()
     elif choice == "3":
-        clear_cache()
+        show_settings_info()
     elif choice == "4":
-        show_cache_info()
+        clear_all_data()
     elif choice == "5":
         # Тест скорости
         words = read_words_from_file("listen.txt")
         if words:
+            settings_manager = SettingsManager()
             cache = AudioCache()
             start = time.time()
             generate_audio_parallel(words, cache=cache)
             print(f"⏱️ Тест скорости: {time.time() - start:.1f}с")
+            settings_manager.save_settings()
             cache.save_cache()
     else:
-        main_optimized_with_cache()
+        main_optimized_with_cache_and_settings()

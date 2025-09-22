@@ -1,0 +1,8 @@
+{
+  "pause_duration": 0.0,
+  "speed_factor": 2.0,
+  "language": "en",
+  "generation_mode": 1,
+  "max_workers": 4,
+  "batch_size": 3
+}
