@@ -441,7 +441,8 @@ def main_optimized_with_cache_and_settings():
     
     generation_mode = settings_manager.get('generation_mode')
     speed_factor = settings_manager.get('speed_factor')
-    
+    language = settings_manger.get('language')
+
     if generation_mode == 1:
         # Параллельный режим
         max_workers, _ = get_optimization_settings(len(words), settings_manager)
@@ -449,6 +450,7 @@ def main_optimized_with_cache_and_settings():
             words, 
             speed_factor=speed_factor, 
             max_workers=max_workers, 
+            language=language,
             cache=cache
         )
     elif generation_mode == 2:
@@ -458,6 +460,7 @@ def main_optimized_with_cache_and_settings():
             words, 
             speed_factor=speed_factor, 
             batch_size=batch_size, 
+            language=language,
             cache=cache
         )
     else:
@@ -469,6 +472,7 @@ def main_optimized_with_cache_and_settings():
                 words, 
                 speed_factor=speed_factor, 
                 max_workers=max_workers, 
+                language=language,
                 cache=cache
             )
         else:
@@ -476,6 +480,7 @@ def main_optimized_with_cache_and_settings():
             audio_data = generate_audio_batch(
                 words, 
                 speed_factor=speed_factor, 
+                language=language,
                 batch_size=batch_size, 
                 cache=cache
             )
@@ -550,6 +555,7 @@ if __name__ == "__main__":
                 words, 
                 speed_factor=settings_manager.get('speed_factor'), 
                 max_workers=settings_manager.get('max_workers'), 
+                language=settings_manager.get('language'),
                 cache=cache
             )
             play_words_optimized(
