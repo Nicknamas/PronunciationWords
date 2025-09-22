@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import json
 import pickle
 import hashlib
+import random  # Добавляем импорт random
 
 class SettingsManager:
     """Класс для управления настройками программы"""
@@ -21,7 +22,8 @@ class SettingsManager:
             'language': 'ru',
             'generation_mode': 1,  # 1-параллельный, 2-батчи, 3-авто
             'max_workers': 4,
-            'batch_size': 3
+            'batch_size': 3,
+            'random_order': True  # Добавляем настройку случайного порядка
         }
         self.settings = self.load_settings()
     
@@ -67,6 +69,7 @@ class SettingsManager:
         print(f"   🎯 Скорость произношения: {self.settings['speed_factor']}x")
         print(f"   🌐 Язык: {self.settings['language']}")
         print(f"   🔧 Режим генерации: {self.get_mode_name()}")
+        print(f"   🎲 Случайный порядок: {'ВКЛ' if self.settings['random_order'] else 'ВЫКЛ'}")
         
         if self.settings['generation_mode'] == 1:
             print(f"   🚀 Потоков: {self.settings['max_workers']}")
@@ -276,30 +279,45 @@ def generate_audio_batch(words, language='ru', speed_factor=1.0, batch_size=3, c
     print(f"📈 Итог: {cache_hits} из кэша, {len(words) - cache_hits} сгенерировано")
     return audio_data
 
-def play_words_optimized(audio_data, words, pause_duration=0.3, playback_speed=1.0):
+def play_words_optimized(audio_data, words, pause_duration=0.3, playback_speed=1.0, random_order=True):
     """Воспроизведение с настройками"""
     pygame.mixer.init(frequency=44100, size=-16, channels=2, buffer=512)
     pygame.mixer.set_num_channels(3)
     
     print(f"🎵 Воспроизведение {len(words)} слов...")
     print(f"⏱️ Пауза: {pause_duration}с, скорость: {playback_speed}x")
+    print(f"🎲 Случайный порядок: {'ВКЛ' if random_order else 'ВЫКЛ'}")
     print("-" * 60)
+    
+    # Создаем список индексов для воспроизведения
+    if random_order:
+        # Случайный порядок: перемешиваем индексы
+        playback_indices = list(range(len(words)))
+        random.shuffle(playback_indices)
+        print("🔀 Слова будут воспроизведены в случайном порядке")
+    else:
+        # Обычный порядок
+        playback_indices = list(range(len(words)))
+        print("➡️ Слова будут воспроизведены в обычном порядке")
     
     temp_dir = tempfile.mkdtemp()
     
     try:
         start_time = time.time()
         
-        for i, (audio_buffer, word) in enumerate(zip(audio_data, words), 1):
+        for play_index, original_index in enumerate(playback_indices, 1):
+            word = words[original_index]
+            audio_buffer = audio_data[original_index]
+            
             if audio_buffer is None:
-                print(f"⏭️ Пропуск {i}/{len(words)}: {word}")
+                print(f"⏭️ Пропуск {play_index}/{len(words)}: {word}")
                 continue
                 
-            print(f"{i}/{len(words)}: {word}")
+            print(f"{play_index}/{len(words)}: {word}")
             
             try:
                 audio_buffer.seek(0)
-                temp_filename = os.path.join(temp_dir, f"word_{i}.mp3")
+                temp_filename = os.path.join(temp_dir, f"word_{original_index}.mp3")
                 
                 with open(temp_filename, 'wb') as f:
                     f.write(audio_buffer.getvalue())
@@ -310,7 +328,7 @@ def play_words_optimized(audio_data, words, pause_duration=0.3, playback_speed=1
                 while channel.get_busy():
                     pygame.time.wait(5)
                 
-                if i < len(words):
+                if play_index < len(words):
                     time.sleep(pause_duration)
                     
             except Exception as e:
@@ -336,7 +354,7 @@ def get_user_settings(settings_manager):
     print("\n⚙️ НАСТРОЙКИ ВОСПРОИЗВЕДЕНИЯ:")
     print("1 - Использовать сохраненные настройки")
     print("2 - Ввести новые настройки")
-    print("3 - Использовать сохраненные, но изменить паузу/скорость")
+    print("3 - Использовать сохраненные, но изменить паузу/скорость/порядок")
     
     choice = input("Выберите вариант (1-3): ").strip()
     
@@ -347,7 +365,7 @@ def get_user_settings(settings_manager):
     
     # Запрос новых настроек
     if choice == "3":
-        print("📝 Изменение только паузы и скорости:")
+        print("📝 Изменение паузы, скорости и порядка:")
     
     if choice != "3":
         # Настройка паузы
@@ -378,6 +396,15 @@ def get_user_settings(settings_manager):
             settings_manager.set('speed_factor', speed)
         else:
             print("❌ Скорость должна быть от 0.5 до 2.0, используется значение по умолчанию")
+    
+    # Настройка случайного порядка
+    print("\n🎲 Порядок воспроизведения:")
+    print("   1 - Случайный порядок (рекомендуется для обучения)")
+    print("   2 - Обычный порядок (как в файле)")
+    
+    order_input = input(f"Порядок [текущий: {'1' if settings_manager.get('random_order') else '2'}]: ").strip()
+    if order_input:
+        settings_manager.set('random_order', order_input == "1")
     
     if choice != "3":
         # Выбор режима генерации
@@ -441,7 +468,7 @@ def main_optimized_with_cache_and_settings():
     
     generation_mode = settings_manager.get('generation_mode')
     speed_factor = settings_manager.get('speed_factor')
-    language = settings_manger.get('language')
+    language = settings_manager.get('language')
 
     if generation_mode == 1:
         # Параллельный режим
@@ -498,7 +525,8 @@ def main_optimized_with_cache_and_settings():
             audio_data, 
             words, 
             settings_manager.get('pause_duration'), 
-            settings_manager.get('speed_factor')
+            settings_manager.get('speed_factor'),
+            settings_manager.get('random_order')  # Добавляем параметр случайного порядка
         )
     except KeyboardInterrupt:
         print("\n⏹️ Воспроизведение прервано пользователем")
@@ -562,7 +590,8 @@ if __name__ == "__main__":
                 audio_data, 
                 words, 
                 settings_manager.get('pause_duration'), 
-                settings_manager.get('speed_factor')
+                settings_manager.get('speed_factor'),
+                settings_manager.get('random_order')  # Добавляем параметр случайного порядка
             )
             settings_manager.save_settings()
             cache.save_cache()

@@ -1,6 +1,18 @@
-привет
-мир
-программирование
-Python
-аудио
-воспроизведение
+love
+chat
+visit
+relax
+eat
+bring
+stay
+go
+listen
+cook
+live
+go out
+have
+arrive
+get up
+like
+come
+leave
